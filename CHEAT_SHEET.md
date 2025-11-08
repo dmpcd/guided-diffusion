@@ -28,24 +28,101 @@ This will:
 python -c "import torch; print(f'GPU: {torch.cuda.get_device_name(0)}')"
 ```
 
-### Step 3: Start Generation (30 seconds)
+### Step 3: Generate WITHOUT Classifier (Baseline) (30 seconds)
 ```bash
-./quick_demo.sh
+./without_classifier.sh
 ```
-**Say**: "Starting diffusion process - 250 steps of iterative denoising. Takes only 6 seconds on RTX 4090!"
+**Say**: "First, baseline generation without classifier guidance. Takes ~8 seconds on RTX 4090!"
 
-### Step 4: While Running, Explain (during the ~60 seconds)
-**Say**: 
-- "U-Net architecture with 280M parameters"
-- "Starts from random noise, removes it step-by-step"
-- "Uses classifier gradients for guidance"
-- "Process: x_T → x_{T-1} → ... → x_0"
-
-### Step 5: Show Results (30 seconds)
+### Step 4: Generate WITH Classifier Guidance (60 seconds)
 ```bash
-ls demo_output/
-# Images are automatically saved and displayed
+./with_classifier_guidance.sh
 ```
+**Say**: "Now with classifier guidance - using gradients from a noisy classifier to steer generation toward more realistic images. Takes ~16 seconds due to gradient computation."
+
+### Step 5: Compare Results (30 seconds)
+```bash
+./compare_results.sh
+```
+**Say**: "Let's compare them side-by-side. Notice how classifier guidance produces more realistic, class-specific features."
+
+### Step 6: Show Comparison (30 seconds)
+```bash
+# View the comparison grid
+xdg-open outputs/comparison/side_by_side.png
+# Or just show: ls outputs/
+```
+
+---
+
+## 🎯 CLASSIFIER GUIDANCE DEMO (Advanced)
+
+### Quick Start - Complete Workflow
+```bash
+# 1. Generate baseline (without classifier)
+./without_classifier.sh
+
+# 2. Generate with classifier guidance  
+./with_classifier_guidance.sh
+
+# 3. Compare results side-by-side
+./compare_results.sh
+
+# 4. View comparison
+ls outputs/
+# - outputs/without_classifier/
+# - outputs/with_classifier/
+# - outputs/comparison/side_by_side.png
+```
+
+### Manual Testing (if needed)
+
+#### Download Classifier Model
+```bash
+cd models
+wget https://openaipublic.blob.core.windows.net/diffusion/jul-2021/64x64_classifier.pt
+cd ..
+```
+
+#### Test WITHOUT Classifier (Baseline)
+```bash
+python simple_demo.py \
+    --attention_resolutions 32,16,8 --class_cond True \
+    --diffusion_steps 1000 --dropout 0.1 --image_size 64 \
+    --learn_sigma True --noise_schedule cosine \
+    --num_channels 192 --num_head_channels 64 --num_res_blocks 3 \
+    --resblock_updown True --use_new_attention_order True \
+    --use_fp16 True --use_scale_shift_norm True \
+    --model_path models/64x64_diffusion.pt \
+    --timestep_respacing 250 --num_samples 4 --batch_size 2 \
+    --output_dir outputs/without_classifier
+```
+
+#### Test WITH Classifier Guidance
+```bash
+python simple_demo.py \
+    --attention_resolutions 32,16,8 --class_cond True \
+    --diffusion_steps 1000 --dropout 0.1 --image_size 64 \
+    --learn_sigma True --noise_schedule cosine \
+    --num_channels 192 --num_head_channels 64 --num_res_blocks 3 \
+    --resblock_updown True --use_new_attention_order True \
+    --use_fp16 True --use_scale_shift_norm True \
+    --model_path models/64x64_diffusion.pt \
+    --classifier_path models/64x64_classifier.pt \
+    --classifier_scale 1.0 --classifier_depth 4 \
+    --timestep_respacing 250 --num_samples 4 --batch_size 2 \
+    --output_dir outputs/with_classifier
+```
+
+### Compare Classifier Scales
+Try different guidance scales to see the quality/diversity trade-off:
+- `--classifier_scale 0.0` = No guidance (same as unconditional)
+- `--classifier_scale 0.5` = Light guidance
+- `--classifier_scale 1.0` = Normal guidance (recommended)
+- `--classifier_scale 2.0` = Strong guidance (higher quality, less diversity)
+- `--classifier_scale 5.0` = Very strong (may oversaturate)
+
+**Key Point**: Higher scale = better quality but less diversity
 
 ---
 

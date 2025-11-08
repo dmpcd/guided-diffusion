@@ -4,3 +4,4 @@ classify_image_graph_def.pb
 models/*.pt
 *.npz
 demo_output/
+outputs/
