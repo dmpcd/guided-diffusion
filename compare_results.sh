@@ -54,6 +54,9 @@ from PIL import Image
 import matplotlib.pyplot as plt
 import os
 import glob
+import sys
+sys.path.insert(0, '.')
+from imagenet_classes import format_class_label
 
 # Load without classifier samples
 without_dir = 'outputs/without_classifier'
@@ -67,9 +70,20 @@ if not without_files or not with_files:
     print('❌ Missing images in one or both directories!')
     exit(1)
 
+# Load class labels
+without_npz = glob.glob(f'{without_dir}/samples_*.npz')[0]
+with_npz = glob.glob(f'{with_dir}/samples_*.npz')[0]
+
+without_data = np.load(without_npz)
+with_data = np.load(with_npz)
+
+# Get class labels
+without_classes = without_data['arr_1'] if 'arr_1' in without_data else None
+with_classes = with_data['arr_1'] if 'arr_1' in with_data else None
+
 n = min(len(without_files), len(with_files), 4)
 
-fig, axes = plt.subplots(n, 2, figsize=(8, n*4))
+fig, axes = plt.subplots(n, 2, figsize=(10, n*5))
 if n == 1:
     axes = axes.reshape(1, -1)
 
@@ -77,17 +91,29 @@ for i in range(n):
     # Without classifier
     img_without = Image.open(without_files[i])
     axes[i, 0].imshow(img_without)
-    axes[i, 0].set_title(f'Sample {i+1}: WITHOUT Classifier', fontsize=10)
+    
+    title_without = f'Sample {i+1}: WITHOUT Classifier'
+    if without_classes is not None:
+        class_label = format_class_label(without_classes[i])
+        title_without += f'\n{class_label}'
+    
+    axes[i, 0].set_title(title_without, fontsize=10, fontweight='bold')
     axes[i, 0].axis('off')
     
     # With classifier
     img_with = Image.open(with_files[i])
     axes[i, 1].imshow(img_with)
-    axes[i, 1].set_title(f'Sample {i+1}: WITH Classifier', fontsize=10)
+    
+    title_with = f'Sample {i+1}: WITH Classifier'
+    if with_classes is not None:
+        class_label = format_class_label(with_classes[i])
+        title_with += f'\n{class_label}'
+    
+    axes[i, 1].set_title(title_with, fontsize=10, fontweight='bold')
     axes[i, 1].axis('off')
 
 plt.suptitle('Comparison: Without vs With Classifier Guidance', 
-             fontsize=14, fontweight='bold', y=0.995)
+             fontsize=16, fontweight='bold', y=0.998)
 plt.tight_layout()
 
 os.makedirs('outputs/comparison', exist_ok=True)
@@ -95,6 +121,13 @@ comparison_path = 'outputs/comparison/side_by_side.png'
 plt.savefig(comparison_path, dpi=150, bbox_inches='tight')
 print(f'✓ Comparison saved: {comparison_path}')
 plt.close()
+
+# Print class information
+if without_classes is not None:
+    print('')
+    print('📋 Generated Classes:')
+    for i in range(min(n, len(without_classes))):
+        print(f'  Sample {i+1}: {format_class_label(without_classes[i])}')
 
 print('')
 print('Key Observations:')

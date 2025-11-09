@@ -53,6 +53,7 @@ python simple_demo.py \
     --timestep_respacing 250 \
     --num_samples 4 \
     --batch_size 2 \
+    --seed 55 \
     --output_dir outputs/with_classifier
 
 echo ""

@@ -26,6 +26,12 @@ from guided_diffusion.script_util import (
 def main():
     args = create_argparser().parse_args()
     
+    # Set random seed for reproducibility
+    if args.seed is not None:
+        th.manual_seed(args.seed)
+        np.random.seed(args.seed)
+        print(f"🎲 Random seed set to: {args.seed}")
+    
     print("🚀 Starting image generation...")
     print(f"   Device: {'CUDA' if th.cuda.is_available() else 'CPU'}")
     
@@ -72,6 +78,8 @@ def main():
     print(f"   Batch size: {args.batch_size}")
     print(f"   Steps: {args.timestep_respacing if args.timestep_respacing else args.diffusion_steps}")
     print(f"   Mode: {'Classifier-guided' if use_classifier else 'Unconditional'}")
+    if args.seed is not None:
+        print(f"   Seed: {args.seed} (for reproducible class selection)")
     print()
     
     # Define classifier guidance function
@@ -179,6 +187,7 @@ def create_argparser():
         classifier_path="",
         classifier_scale=1.0,
         output_dir="",
+        seed=42,  # Default seed for reproducibility
     )
     defaults.update(model_and_diffusion_defaults())
     defaults.update(classifier_defaults())

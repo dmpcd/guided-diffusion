@@ -6,6 +6,7 @@ cd /home/senum/projects/guided-diffusion/guided-diffusion
 
 NUM_SAMPLES=${1:-100}  # Default 100 samples, or use first argument
 BATCH_SIZE=${2:-10}     # Default batch size 10
+SEED=${3:-42}           # Default seed 42 for reproducibility
 
 echo "🎨 GENERATING SAMPLES FOR FID EVALUATION"
 echo "========================================="
@@ -13,6 +14,7 @@ echo ""
 echo "📋 Configuration:"
 echo "   - Samples: $NUM_SAMPLES"
 echo "   - Batch size: $BATCH_SIZE"
+echo "   - Seed: $SEED (ensures same classes for both runs)"
 echo "   - Resolution: 64x64"
 echo ""
 
@@ -43,6 +45,7 @@ python simple_demo.py \
     --timestep_respacing 250 \
     --num_samples $NUM_SAMPLES \
     --batch_size $BATCH_SIZE \
+    --seed $SEED \
     --output_dir outputs/fid_evaluation/without_classifier
 
 echo ""
@@ -72,6 +75,7 @@ python simple_demo.py \
     --timestep_respacing 250 \
     --num_samples $NUM_SAMPLES \
     --batch_size $BATCH_SIZE \
+    --seed $SEED \
     --output_dir outputs/fid_evaluation/with_classifier
 
 echo ""
