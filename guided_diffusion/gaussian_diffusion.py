@@ -534,6 +534,135 @@ class GaussianDiffusion:
                 yield out
                 img = out["sample"]
 
+    def p_sample_loop_icg(
+        self,
+        model,
+        shape,
+        noise=None,
+        clip_denoised=True,
+        denoised_fn=None,
+        model_kwargs=None,
+        device=None,
+        progress=False,
+        icg_scale=1.5,
+        icg_seed=None,
+    ):
+        """
+        Generate samples from the model using Independent Condition Guidance (ICG).
+        
+        ICG eliminates the need for a classifier by using the diffusion model itself
+        to provide guidance. It computes predictions for both the target condition
+        and a random independent condition, then interpolates between them.
+        
+        The guidance formula is:
+        D_guided = D_random + icg_scale * (D_cond - D_random)
+                 = (1 - icg_scale) * D_random + icg_scale * D_cond
+        
+        :param model: the model module.
+        :param shape: the shape of the samples, (N, C, H, W).
+        :param noise: if specified, the noise from the encoder to sample.
+                      Should be of the same shape as `shape`.
+        :param clip_denoised: if True, clip x_start predictions to [-1, 1].
+        :param denoised_fn: if not None, a function which applies to the
+            x_start prediction before it is used to sample.
+        :param model_kwargs: if not None, a dict of extra keyword arguments to
+            pass to the model. Must contain 'y' for the target class labels.
+        :param device: if specified, the device to create the samples on.
+                       If not specified, use a model parameter's device.
+        :param progress: if True, show a tqdm progress bar.
+        :param icg_scale: guidance scale (w in the paper). Higher values increase
+                         quality but reduce diversity. Default 1.5.
+        :param icg_seed: if specified, seed for ICG's internal random condition
+                        generation. This keeps ICG's RNG separate from the main
+                        RNG used for class label generation, ensuring reproducibility.
+        :return: a non-differentiable batch of samples.
+        """
+        if device is None:
+            device = next(model.parameters()).device
+        assert isinstance(shape, (tuple, list))
+        
+        # Get target condition (y_cond)
+        if model_kwargs is None or "y" not in model_kwargs:
+            raise ValueError("ICG requires 'y' (target class labels) in model_kwargs")
+        
+        y_cond = model_kwargs["y"]
+        batch_size = shape[0]
+        
+        # Create separate RNG for ICG internal randomness
+        # This prevents ICG from affecting the main RNG state used for class generation
+        if icg_seed is not None:
+            icg_generator = th.Generator(device=device).manual_seed(icg_seed)
+        else:
+            # Use a deterministic seed based on the target classes to ensure
+            # reproducibility while keeping separate from main RNG
+            icg_seed_value = int(y_cond.sum().item()) + 12345
+            icg_generator = th.Generator(device=device).manual_seed(icg_seed_value)
+        
+        # Initialize from noise
+        if noise is not None:
+            img = noise
+        else:
+            img = th.randn(*shape, device=device)
+        
+        indices = list(range(self.num_timesteps))[::-1]
+        
+        if progress:
+            from tqdm.auto import tqdm
+            indices = tqdm(indices)
+        
+        for i in indices:
+            t = th.tensor([i] * batch_size, device=device)
+            
+            with th.no_grad():
+                # 1. Generate random independent condition (y_random)
+                # Use separate generator to avoid affecting main RNG
+                y_random = th.randint(
+                    low=0, 
+                    high=1000,  # NUM_CLASSES for ImageNet
+                    size=y_cond.shape, 
+                    device=device,
+                    generator=icg_generator
+                )
+                
+                # 2. Get model prediction with target condition
+                out_cond = self.p_mean_variance(
+                    model,
+                    img,
+                    t,
+                    clip_denoised=clip_denoised,
+                    denoised_fn=denoised_fn,
+                    model_kwargs={"y": y_cond},
+                )
+                
+                # 3. Get model prediction with random condition
+                out_random = self.p_mean_variance(
+                    model,
+                    img,
+                    t,
+                    clip_denoised=clip_denoised,
+                    denoised_fn=denoised_fn,
+                    model_kwargs={"y": y_random},
+                )
+                
+                # 4. Apply ICG guidance to the mean
+                # D_guided = (1 - w) * D_random + w * D_cond
+                mean_guided = (1 - icg_scale) * out_random["mean"] + icg_scale * out_cond["mean"]
+                
+                # 5. Use variance from conditional prediction
+                variance = out_cond["variance"]
+                log_variance = out_cond["log_variance"]
+                
+                # 6. Sample noise
+                noise = th.randn_like(img)
+                nonzero_mask = (
+                    (t != 0).float().view(-1, *([1] * (len(img.shape) - 1)))
+                )  # no noise when t == 0
+                
+                # 7. Sample x_{t-1} using reparameterization trick
+                img = mean_guided + nonzero_mask * th.exp(0.5 * log_variance) * noise
+        
+        return img
+
     def ddim_sample(
         self,
         model,
