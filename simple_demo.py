@@ -73,7 +73,7 @@ def main():
         print(f"✓ Classifier loaded successfully!")
         print(f"   Guidance scale: {args.classifier_scale}")
     
-    print(f"\n🎨 Generating {args.num_samples} samples...")
+    print(f"\n Generating {args.num_samples} samples...")
     print(f"   Resolution: {args.image_size}×{args.image_size}")
     print(f"   Batch size: {args.batch_size}")
     print(f"   Steps: {args.timestep_respacing if args.timestep_respacing else args.diffusion_steps}")
@@ -99,17 +99,33 @@ def main():
     all_images = []
     all_labels = []
     
+    # Parse specific classes if provided
+    specific_classes = None
+    if args.classes:
+        specific_classes = [int(c.strip()) for c in args.classes.split(",")]
+        print(f"🎯 Using specific classes: {specific_classes}")
+    
     num_batches = (args.num_samples + args.batch_size - 1) // args.batch_size
+    sample_idx = 0  # Track which sample we're on
     
     for batch_idx in range(num_batches):
         print(f"📊 Batch {batch_idx + 1}/{num_batches}...")
         
         model_kwargs = {}
         if args.class_cond:
-            # Random classes
-            classes = th.randint(
-                low=0, high=1000, size=(args.batch_size,), device=device
-            )
+            if specific_classes:
+                # Use specific classes (cycle through if needed)
+                batch_classes = []
+                for i in range(args.batch_size):
+                    class_idx = (sample_idx + i) % len(specific_classes)
+                    batch_classes.append(specific_classes[class_idx])
+                classes = th.tensor(batch_classes, device=device)
+                sample_idx += args.batch_size
+            else:
+                # Random classes
+                classes = th.randint(
+                    low=0, high=1000, size=(args.batch_size,), device=device
+                )
             model_kwargs["y"] = classes
         
         # Sample
@@ -188,6 +204,7 @@ def create_argparser():
         classifier_scale=1.0,
         output_dir="",
         seed=42,  # Default seed for reproducibility
+        classes="",  # Comma-separated class IDs (e.g., "207,281,388")
     )
     defaults.update(model_and_diffusion_defaults())
     defaults.update(classifier_defaults())
